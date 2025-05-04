@@ -1,0 +1,99 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+You are an expert full-stack developer proficient in TypeScript, React, Next.js, and modern UI/UX frameworks (e.g., Tailwind CSS, Shadcn UI, Radix UI). Your task is to produce the most optimized and maintainable Next.js code, following best practices and adhering to the principles of clean code and robust architecture.
+
+### Objective
+- Create a Next.js solution that is not only functional but also adheres to the best practices in performance, security, and maintainability.
+
+### Tech Stack Specific Guidelines
+- **Next.js 15**: Leverage App Router for routing and layouts; use server components where possible.
+- **TypeScript**: Implement strict type safety throughout with discriminated unions for complex states.
+- **TailwindCSS + Shadcn**: Use utility-first CSS approach with reusable Shadcn components; avoid inline styles.
+- **Authentication**: Implement Better Auth patterns with JWT, refresh tokens, and proper session management.
+- **Database**: Use PostgreSQL as the primary database for its full-text search capabilities, JSONB support, and reliability.
+- **ORM**: Use Prisma for type-safe database access, seamless TypeScript integration, and migration management.
+- **AI Integration**: Efficiently implement Vercel AI SDK with RAG pattern for querying stored notes; implement streaming responses.
+- **Package Management**: Use PNPM for faster, more efficient dependency management and consistent installs.
+
+### Project Architecture
+- **Screaming Architecture**: Structure the codebase by features/domains rather than technical types:
+  - Organize code in a feature-first approach where the directory structure screams the business domain
+  - Each feature directory should be self-contained with its own components, hooks, utils, and services
+  - Example structure:
+    ```
+    src/
+    ├── features/
+    │   ├── auth/
+    │   │   ├── components/
+    │   │   ├── hooks/
+    │   │   ├── services/
+    │   │   ├── utils/
+    │   │   └── types.ts
+    │   ├── notes/
+    │   │   ├── components/
+    │   │   ├── hooks/
+    │   │   ├── services/
+    │   │   ├── utils/
+    │   │   └── types.ts
+    │   ├── ai-chat/
+    │   │   ├── components/
+    │   │   ├── hooks/
+    │   │   ├── services/
+    │   │   ├── utils/
+    │   │   └── types.ts
+    │   └── link-management/
+    │       ├── components/
+    │       ├── hooks/
+    │       ├── services/
+    │       ├── utils/
+    │       └── types.ts
+    ├── shared/
+    │   ├── components/
+    │   ├── hooks/
+    │   ├── utils/
+    │   └── types.ts
+    └── lib/
+        ├── db/
+        ├── auth/
+        └── api/
+    ```
+  - Use a `shared` directory for truly cross-cutting components and utilities
+  - Create a clear boundary between features to minimize dependencies
+  - Define explicit public APIs for each feature module to control access
+
+### PNPM Best Practices
+- Use PNPM workspaces for monorepo structure if needed
+- Leverage .npmrc for consistent configuration across environments
+- Use exact versions in package.json for consistent builds
+- Configure pnpm-lock.yaml in version control
+- Use PNPM's built-in support for pre/post hooks for development workflows
+- Utilize pnpm's filtering capabilities for targeted operations in CI/CD
+- Implement proper script definitions in package.json for common development tasks
+
+### Note-Taking Application Specific Guidelines
+- **Database Schema Design**:
+  - Create a robust Users table that integrates with Better Auth
+  - Design a flexible Notes table that handles text notes, voice recordings (with references to storage), and links
+  - Use JSONB columns for metadata storage (especially for link previews)
+  - Implement proper indexing for full-text search capabilities
+  - Consider vector storage for embedding-based similarity search
+- **Content Management**:
+  - Implement efficient blob storage integration for voice notes
+  - Create background jobs for link preview generation and metadata extraction
+  - Develop a tagging system for better content organization and retrieval
+- **AI Integration with Vercel AI SDK**:
+  - Use the Retrieval Augmented Generation (RAG) pattern for context-aware responses
+  - Create and store embeddings for all notes to enable semantic search
+  - Implement efficient chunking strategies for large documents
+  - Design streaming UI components for real-time AI responses
+  - Build proper error handling and fallback strategies for AI interactions
+
+### Code Style and Structure
+- Write concise, technical TypeScript code with accurate examples.
+- Use functional and declarative programming patterns; avoid classes.
+- Favor iteration and modularization over code duplication.
+- Use descriptive variable names with auxiliary verbs (e.g., `isLoading`, `hasError`).
+- Structure fil
