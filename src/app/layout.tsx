@@ -1,17 +1,18 @@
 import type { Metadata } from 'next'
-import { Geist, Geist_Mono } from 'next/font/google'
+import { Inter, Raleway } from 'next/font/google'
 import './globals.css'
-import { ThemeProvider } from '@/providers/ThemeProvider'
 import { Toaster } from 'sonner'
+import { Providers } from '@/providers/Providers'
 
-const geistSans = Geist({
-	variable: '--font-geist-sans',
+const inter = Inter({
+	variable: '--font-inter',
 	subsets: ['latin'],
 })
 
-const geistMono = Geist_Mono({
-	variable: '--font-geist-mono',
+const raleway = Raleway({
+	variable: '--font-raleway',
 	subsets: ['latin'],
+	weight: ['400', '500', '600', '700', '800'],
 })
 
 export const metadata: Metadata = {
@@ -26,17 +27,8 @@ export default function RootLayout({
 }>) {
 	return (
 		<html lang='en' suppressHydrationWarning>
-			<body
-				className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-			>
-				<ThemeProvider
-					attribute='class'
-					defaultTheme='system'
-					enableSystem
-					disableTransitionOnChange
-				>
-					{children}
-				</ThemeProvider>
+			<body className={`${inter.variable} ${raleway.variable} antialiased`}>
+				<Providers>{children}</Providers>
 				<Toaster />
 			</body>
 		</html>
