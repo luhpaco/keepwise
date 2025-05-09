@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import {
 	Dialog,
 	DialogContent,
@@ -14,93 +14,18 @@ import { RecentLinks } from '@/features/link-management/components/recent-links'
 import { LinkData, SaveLinkFormData } from '@/features/link-management/types'
 import { CaptureIdeaForm } from '@/features/idea-management/components/capture-idea-form'
 import { IdeaData, SaveIdeaFormData } from '@/features/idea-management/types'
-import { Link, Lightbulb } from 'lucide-react'
+import { Link, Lightbulb, Loader2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
-
-// Datos de ejemplo para desarrollo
-const mockLinks: LinkData[] = [
-	{
-		id: '1',
-		url: 'https://example.com/article1',
-		title: 'Understanding Next.js App Router',
-		description:
-			'A comprehensive guide to the new App Router in Next.js 15 and how to leverage its features for better performance.',
-		category: 'Learning',
-		author: 'John Doe',
-		source: 'Next.js Blog',
-		tags: ['Next.js', 'React', 'Web Development'],
-		createdAt: new Date('2023-07-15'),
-	},
-	{
-		id: '2',
-		url: 'https://example.com/article2',
-		title: 'Building UI Components with Shadcn UI',
-		description:
-			'Learn how to use Shadcn UI to create beautiful, accessible, and customizable UI components for your React applications.',
-		category: 'Research',
-		tags: ['UI', 'Design', 'React'],
-		createdAt: new Date('2023-07-10'),
-	},
-	{
-		id: '3',
-		url: 'https://example.com/article3',
-		title: 'TypeScript Best Practices for 2023',
-		description:
-			'Discover the latest TypeScript patterns and practices that will help you write more maintainable code.',
-		category: 'Work',
-		author: 'Jane Smith',
-		source: 'TypeScript Weekly',
-		tags: ['TypeScript', 'JavaScript', 'Programming'],
-		createdAt: new Date('2023-07-05'),
-	},
-]
-
-// Datos de ejemplo para ideas
-const mockIdeas: IdeaData[] = [
-	{
-		id: '1',
-		title: 'Mobile App for Task Management',
-		content:
-			'Create a minimalist task management app with voice input and AI categorization',
-		category: 'Ideas',
-		tags: ['Mobile', 'Productivity', 'AI'],
-		createdAt: new Date('2023-04-14'),
-	},
-	{
-		id: '2',
-		title: 'E-commerce Dashboard Redesign',
-		content: 'Redesign the dashboard for better usability and visual hierarchy',
-		category: 'Work',
-		tags: ['UI/UX', 'Dashboard', 'E-commerce'],
-		createdAt: new Date('2023-04-12'),
-	},
-	{
-		id: '3',
-		title: 'Mobile App for Task Management',
-		content:
-			'Create a minimalist task management app with voice input and AI categorization',
-		category: 'Ideas',
-		tags: ['Mobile', 'Productivity', 'AI'],
-		createdAt: new Date('2023-04-10'),
-	},
-]
-
-// Combinamos los dos tipos para el feed de Recent Saves
-type SavedItem = (LinkData | IdeaData) & { type: 'link' | 'idea' }
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { toast } from 'sonner'
 
 // Array de variantes de colores para las badges
 const badgeVariants = [
 	'default',
 	'secondary',
-	'success',
-	'warning',
-	'info',
-	'purple',
-	'pink',
-	'orange',
-	'indigo',
-	'teal',
+	'destructive',
+	'outline',
 ] as const
 
 // Función para obtener un color consistente basado en el texto de la etiqueta
@@ -115,16 +40,69 @@ const getBadgeVariantFromTag = (tag: string) => {
 	return badgeVariants[index]
 }
 
+// Tipo para datos que vienen del servidor
+type ServerMemory = {
+	id: string
+	title: string
+	type: 'LINK' | 'IDEA'
+	tags: string[]
+	category?: string
+	createdAt: string
+	updatedAt: string
+	url?: string
+	description?: string
+	author?: string
+	source?: string
+	personalNotes?: string
+	content?: string
+	attachments?: {
+		name: string
+		url: string
+		type: string
+		size: number
+	}[]
+}
+
+// Función para convertir las fechas de string a Date
+const parseServerData = (data: ServerMemory[]): (LinkData | IdeaData)[] => {
+	return data.map((item) => {
+		const base = {
+			id: item.id,
+			title: item.title,
+			category: item.category,
+			tags: item.tags,
+			createdAt: new Date(item.createdAt),
+			updatedAt: item.updatedAt ? new Date(item.updatedAt) : undefined,
+		}
+
+		if (item.type === 'LINK') {
+			return {
+				...base,
+				url: item.url!,
+				description: item.description,
+				author: item.author,
+				source: item.source,
+				personalNotes: item.personalNotes,
+				type: 'link' as const,
+			} as LinkData & { type: 'link' }
+		} else {
+			return {
+				...base,
+				content: item.content,
+				attachments: item.attachments,
+				type: 'idea' as const,
+			} as IdeaData & { type: 'idea' }
+		}
+	})
+}
+
 // Función para convertir los datos a un formato unificado
 const prepareSavedItems = (
-	links: LinkData[],
-	ideas: IdeaData[]
-): SavedItem[] => {
-	const linkItems = links.map((link) => ({ ...link, type: 'link' as const }))
-	const ideaItems = ideas.map((idea) => ({ ...idea, type: 'idea' as const }))
-
+	links: (LinkData & { type: 'link' })[],
+	ideas: (IdeaData & { type: 'idea' })[]
+) => {
 	// Combinar y ordenar por fecha (más recientes primero)
-	return [...linkItems, ...ideaItems].sort((a, b) => {
+	return [...links, ...ideas].sort((a, b) => {
 		const dateA = a.createdAt || new Date()
 		const dateB = b.createdAt || new Date()
 		return dateB.getTime() - dateA.getTime()
@@ -132,16 +110,63 @@ const prepareSavedItems = (
 }
 
 export default function SavePage() {
-	const [links, setLinks] = useState<LinkData[]>(mockLinks)
-	const [ideas, setIdeas] = useState<IdeaData[]>(mockIdeas)
-	const [savedItems, setSavedItems] = useState<SavedItem[]>(
-		prepareSavedItems(mockLinks, mockIdeas)
-	)
+	const [isLoading, setIsLoading] = useState(true)
+	const [error, setError] = useState<string | null>(null)
+	const [links, setLinks] = useState<(LinkData & { type: 'link' })[]>([])
+	const [ideas, setIdeas] = useState<(IdeaData & { type: 'idea' })[]>([])
+	const [savedItems, setSavedItems] = useState<
+		((LinkData & { type: 'link' }) | (IdeaData & { type: 'idea' }))[]
+	>([])
 
 	const [linkDialogOpen, setLinkDialogOpen] = useState(false)
 	const [ideaDialogOpen, setIdeaDialogOpen] = useState(false)
-	const [editingLink, setEditingLink] = useState<LinkData | null>(null)
-	const [editingIdea, setEditingIdea] = useState<IdeaData | null>(null)
+	const [editingLink, setEditingLink] = useState<
+		(LinkData & { type: 'link' }) | null
+	>(null)
+	const [editingIdea, setEditingIdea] = useState<
+		(IdeaData & { type: 'idea' }) | null
+	>(null)
+
+	// Cargar datos recientes del servidor
+	useEffect(() => {
+		const fetchRecentData = async () => {
+			setIsLoading(true)
+			setError(null)
+
+			try {
+				const response = await fetch('/api/memories/recent?limit=20')
+
+				if (!response.ok) {
+					throw new Error(`Error: ${response.status}`)
+				}
+
+				const data = (await response.json()) as ServerMemory[]
+
+				const parsedData = parseServerData(data)
+				const linkItems = parsedData.filter(
+					(item) => 'url' in item
+				) as (LinkData & { type: 'link' })[]
+				const ideaItems = parsedData.filter(
+					(item) => 'content' in item
+				) as (IdeaData & { type: 'idea' })[]
+
+				setLinks(linkItems)
+				setIdeas(ideaItems)
+				setSavedItems(prepareSavedItems(linkItems, ideaItems))
+			} catch (err) {
+				console.error('Error al cargar datos recientes:', err)
+				setError('No se pudieron cargar los datos recientes')
+				toast.error('Error al cargar datos', {
+					description:
+						'No se pudieron cargar los datos recientes. Intente de nuevo más tarde.',
+				})
+			} finally {
+				setIsLoading(false)
+			}
+		}
+
+		fetchRecentData()
+	}, [])
 
 	// Manejadores para Link
 	const handleSaveLink = (data: SaveLinkFormData) => {
@@ -161,17 +186,24 @@ export default function SavePage() {
 			)
 			setLinks(updatedLinks)
 			setSavedItems(prepareSavedItems(updatedLinks, ideas))
+			toast.success('Enlace actualizado', {
+				description: `El enlace "${data.title}" ha sido actualizado correctamente.`,
+			})
 		} else {
 			// Si es un nuevo link, añadirlo a la lista
-			const newLink: LinkData = {
+			const newLink: LinkData & { type: 'link' } = {
 				id: Date.now().toString(),
 				...data,
 				tags: data.tags ? data.tags.split(',').map((tag) => tag.trim()) : [],
 				createdAt: new Date(),
+				type: 'link',
 			}
 			const updatedLinks = [newLink, ...links]
 			setLinks(updatedLinks)
 			setSavedItems(prepareSavedItems(updatedLinks, ideas))
+			toast.success('Enlace guardado', {
+				description: `El enlace "${data.title}" ha sido guardado correctamente.`,
+			})
 		}
 
 		// Cerrar el diálogo y resetear el estado de edición
@@ -205,9 +237,12 @@ export default function SavePage() {
 			)
 			setIdeas(updatedIdeas)
 			setSavedItems(prepareSavedItems(links, updatedIdeas))
+			toast.success('Idea actualizada', {
+				description: `La idea "${data.title}" ha sido actualizada correctamente.`,
+			})
 		} else {
 			// Si es una nueva idea, añadirla a la lista
-			const newIdea: IdeaData = {
+			const newIdea: IdeaData & { type: 'idea' } = {
 				id: Date.now().toString(),
 				title: data.title,
 				content: data.content,
@@ -222,10 +257,14 @@ export default function SavePage() {
 					  }))
 					: undefined,
 				createdAt: new Date(),
+				type: 'idea',
 			}
 			const updatedIdeas = [newIdea, ...ideas]
 			setIdeas(updatedIdeas)
 			setSavedItems(prepareSavedItems(links, updatedIdeas))
+			toast.success('Idea guardada', {
+				description: `La idea "${data.title}" ha sido guardada correctamente.`,
+			})
 		}
 
 		// Cerrar el diálogo y resetear el estado de edición
@@ -233,35 +272,73 @@ export default function SavePage() {
 		setEditingIdea(null)
 	}
 
-	const handleEditItem = (item: SavedItem) => {
+	const handleEditItem = (
+		item: (LinkData & { type: 'link' }) | (IdeaData & { type: 'idea' })
+	) => {
 		if (item.type === 'link') {
-			setEditingLink(item as LinkData)
+			setEditingLink(item as LinkData & { type: 'link' })
 			setLinkDialogOpen(true)
 		} else {
-			setEditingIdea(item as IdeaData)
+			setEditingIdea(item as IdeaData & { type: 'idea' })
 			setIdeaDialogOpen(true)
 		}
 	}
 
 	const handleDeleteItem = (id: string, type: 'link' | 'idea') => {
 		if (type === 'link') {
+			const linkToDelete = links.find((link) => link.id === id)
 			const updatedLinks = links.filter((link) => link.id !== id)
 			setLinks(updatedLinks)
 			setSavedItems(prepareSavedItems(updatedLinks, ideas))
+			toast.success('Enlace eliminado', {
+				description: linkToDelete
+					? `El enlace "${linkToDelete.title}" ha sido eliminado.`
+					: 'El enlace ha sido eliminado.',
+			})
 		} else {
+			const ideaToDelete = ideas.find((idea) => idea.id === id)
 			const updatedIdeas = ideas.filter((idea) => idea.id !== id)
 			setIdeas(updatedIdeas)
 			setSavedItems(prepareSavedItems(links, updatedIdeas))
+			toast.success('Idea eliminada', {
+				description: ideaToDelete
+					? `La idea "${ideaToDelete.title}" ha sido eliminada.`
+					: 'La idea ha sido eliminada.',
+			})
 		}
 	}
 
 	// Renderizar la lista de enlaces recientes
 	const renderRecentSaves = () => {
+		if (isLoading) {
+			return (
+				<div className='flex justify-center items-center p-12'>
+					<Loader2 className='h-8 w-8 animate-spin text-primary' />
+					<span className='ml-2 text-muted-foreground'>
+						Cargando elementos guardados...
+					</span>
+				</div>
+			)
+		}
+
+		if (error) {
+			return (
+				<Alert variant='destructive' className='my-4'>
+					<AlertTitle>Error</AlertTitle>
+					<AlertDescription>{error}</AlertDescription>
+				</Alert>
+			)
+		}
+
 		if (savedItems.length === 0) {
 			return (
-				<div className='p-8 text-center text-muted-foreground'>
-					No hay elementos guardados recientemente.
-				</div>
+				<Alert className='my-4'>
+					<AlertTitle>No hay elementos guardados</AlertTitle>
+					<AlertDescription>
+						No hay elementos guardados recientemente. ¡Comienza guardando un
+						enlace o una idea utilizando las opciones de arriba!
+					</AlertDescription>
+				</Alert>
 			)
 		}
 
@@ -288,7 +365,7 @@ export default function SavePage() {
 									<h3 className='font-medium'>
 										{isLink ? (
 											<a
-												href={(item as LinkData).url}
+												href={(item as LinkData & { type: 'link' }).url}
 												target='_blank'
 												rel='noopener noreferrer'
 												className='hover:underline inline-flex items-center gap-1.5'
@@ -376,12 +453,12 @@ export default function SavePage() {
 							</div>
 
 							{(isLink
-								? (item as LinkData).description
-								: (item as IdeaData).content) && (
+								? (item as LinkData & { type: 'link' }).description
+								: (item as IdeaData & { type: 'idea' }).content) && (
 								<p className='text-sm text-muted-foreground mt-2 line-clamp-2'>
 									{isLink
-										? (item as LinkData).description
-										: (item as IdeaData).content}
+										? (item as LinkData & { type: 'link' }).description
+										: (item as IdeaData & { type: 'idea' }).content}
 								</p>
 							)}
 
@@ -392,17 +469,19 @@ export default function SavePage() {
 									</span>
 								)}
 
-								{isLink && (item as LinkData).source && (
+								{isLink && (item as LinkData & { type: 'link' }).source && (
 									<>
 										<span>•</span>
-										<span>{(item as LinkData).source}</span>
+										<span>{(item as LinkData & { type: 'link' }).source}</span>
 									</>
 								)}
 
-								{isLink && (item as LinkData).author && (
+								{isLink && (item as LinkData & { type: 'link' }).author && (
 									<>
 										<span>•</span>
-										<span>By {(item as LinkData).author}</span>
+										<span>
+											By {(item as LinkData & { type: 'link' }).author}
+										</span>
 									</>
 								)}
 							</div>
@@ -517,9 +596,15 @@ export default function SavePage() {
 			<div className='flex-1 h-full gap-4'>
 				<div className='flex items-center justify-between mb-4'>
 					<h2 className='text-xl font-semibold'>Recent Saves</h2>
-					<button className='text-sm text-primary hover:underline'>
-						View All
-					</button>
+					<Button
+						variant='ghost'
+						size='sm'
+						disabled={isLoading}
+						onClick={() => window.location.reload()}
+						className='text-sm text-primary hover:underline'
+					>
+						Refresh
+					</Button>
 				</div>
 
 				<ScrollArea className='h-[calc(100vh-48%)] md:h-[calc(100vh-300px)] pb-2'>
