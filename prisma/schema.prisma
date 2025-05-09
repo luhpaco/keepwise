@@ -1,0 +1,107 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/app/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Memory {
+  id               String           @id @default(cuid())
+  title            String
+  type             MemoryType
+  tags             Tag[]
+  usageProbability UsageProbability @default(MEDIUM)
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  userId           String
+  categoryId       String?
+  category         Category?        @relation(fields: [categoryId], references: [id])
+  idea             Idea?
+  link             Link?
+
+  @@index([userId])
+  @@index([categoryId])
+}
+
+model Category {
+  id        String   @id @default(cuid())
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  userId    String
+  memories  Memory[]
+
+  @@unique([name, userId])
+  @@index([userId])
+}
+
+model Idea {
+  id        String   @id @default(cuid())
+  content   String
+  memoryId  String   @unique
+  memory    Memory   @relation(fields: [memoryId], references: [id], onDelete: Cascade)
+  files     File[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([memoryId])
+}
+
+model Link {
+  id            String   @id @default(cuid())
+  url           String
+  description   String?
+  author        String?
+  source        String?
+  personalNotes String?
+  memoryId      String   @unique
+  memory        Memory   @relation(fields: [memoryId], references: [id], onDelete: Cascade)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([memoryId])
+}
+
+model Tag {
+  id        String   @id @default(cuid())
+  name      String
+  memories  Memory[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([name])
+}
+
+model File {
+  id        String   @id @default(cuid())
+  name      String
+  url       String
+  type      String
+  size      Int
+  ideaId    String
+  idea      Idea     @relation(fields: [ideaId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([ideaId])
+}
+
+enum MemoryType {
+  IDEA
+  LINK
+}
+
+enum UsageProbability {
+  LOW
+  MEDIUM
+  HIGH
+}
