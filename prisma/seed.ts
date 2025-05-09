@@ -10,7 +10,7 @@ import { withAccelerate } from '@prisma/extension-accelerate'
 const prisma = new PrismaClient().$extends(withAccelerate())
 
 // ClerkID de prueba (reemplazar con uno real si es necesario)
-const testUserId = 'user_2NNEqL3CRxgs8j4RcNfnA33EZGK'
+const testUserId = 'user_2wkihM7oZQxzyYWleQ8OdoAr52k'
 
 // Categorías de ejemplo
 const categoryData: Prisma.CategoryCreateInput[] = [
