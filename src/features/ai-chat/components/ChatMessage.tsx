@@ -7,20 +7,36 @@ import { User, Bot } from 'lucide-react'
 import { SavedRecordCard } from './SavedRecordCard'
 import ReactMarkdown from 'react-markdown'
 import type { ComponentProps, ReactNode } from 'react'
+import { format } from 'date-fns'
 
 // TODO: Move to a shared types file (e.g., src/features/ai-chat/types.ts)
 // TODO: Refine 'records' type to use RecordData from SavedRecordCard
 export interface ChatMessageWithRecords extends Message {
 	records?: any[]
+	timestamp?: string | Date
 }
 
-interface ChatMessageProps {
+export interface BaseChatMessageProps {
+	message: {
+		role: string
+		content: string
+		timestamp?: string | Date
+	}
+	isLastMessage?: boolean
+	showTimestamp?: boolean
+	botName?: string
+}
+
+export interface ChatMessageProps {
 	message: ChatMessageWithRecords
-	isLastMessage: boolean
+	isLastMessage?: boolean
+	showTimestamp?: boolean
 }
 
 // Custom renderers for ReactMarkdown
-const markdownComponents: ComponentProps<typeof ReactMarkdown>['components'] = {
+export const markdownComponents: ComponentProps<
+	typeof ReactMarkdown
+>['components'] = {
 	p: ({ children }: { children?: ReactNode }) => (
 		<p className='mb-2 last:mb-0'>{children}</p>
 	),
@@ -65,9 +81,13 @@ const markdownComponents: ComponentProps<typeof ReactMarkdown>['components'] = {
 	),
 }
 
-export function ChatMessage({ message, isLastMessage }: ChatMessageProps) {
+export function BaseChatMessage({
+	message,
+	isLastMessage = false,
+	showTimestamp = false,
+	botName = 'SilvIA',
+}: BaseChatMessageProps) {
 	const isUser = message.role === 'user'
-	const records = message.records // Access records directly from the message object
 
 	return (
 		<div
@@ -80,7 +100,7 @@ export function ChatMessage({ message, isLastMessage }: ChatMessageProps) {
 			{!isUser && (
 				<div className='mr-3 flex-shrink-0'>
 					<Avatar className='h-8 w-8 border bg-primary/10'>
-						<AvatarImage src='/silvia-avatar.png' alt='SilvIA' />
+						<AvatarImage src='/silvia-avatar.png' alt={botName} />
 						<AvatarFallback className='text-primary bg-transparent'>
 							<Bot className='h-4 w-4' />
 						</AvatarFallback>
@@ -94,6 +114,24 @@ export function ChatMessage({ message, isLastMessage }: ChatMessageProps) {
 					isUser ? 'items-end' : 'items-start'
 				)}
 			>
+				{showTimestamp && (
+					<div className='flex items-center gap-2'>
+						<span className='text-sm font-medium text-muted-foreground'>
+							{isUser ? 'You' : botName}
+						</span>
+						{message.timestamp && (
+							<span className='text-xs text-muted-foreground'>
+								{format(
+									typeof message.timestamp === 'string'
+										? new Date(message.timestamp)
+										: message.timestamp,
+									'h:mm a'
+								)}
+							</span>
+						)}
+					</div>
+				)}
+
 				<div
 					className={cn(
 						'rounded-xl px-4 py-3 text-sm shadow-sm',
@@ -104,15 +142,6 @@ export function ChatMessage({ message, isLastMessage }: ChatMessageProps) {
 						{message.content}
 					</ReactMarkdown>
 				</div>
-
-				{records && records.length > 0 && (
-					<div className='mt-2 w-full space-y-2'>
-						{/* TODO: Refine 'record' type when RecordData is shared */}
-						{records.map((record: any) => (
-							<SavedRecordCard key={record.id} record={record} />
-						))}
-					</div>
-				)}
 			</div>
 
 			{isUser && (
@@ -126,5 +155,32 @@ export function ChatMessage({ message, isLastMessage }: ChatMessageProps) {
 				</div>
 			)}
 		</div>
+	)
+}
+
+export function ChatMessage({
+	message,
+	isLastMessage = false,
+	showTimestamp = false,
+}: ChatMessageProps) {
+	const records = message.records // Access records directly from the message object
+
+	return (
+		<>
+			<BaseChatMessage
+				message={message}
+				isLastMessage={!records || records.length === 0 ? isLastMessage : false}
+				showTimestamp={showTimestamp}
+			/>
+
+			{records && records.length > 0 && (
+				<div className='mt-2 w-full space-y-2 mb-4'>
+					{/* TODO: Refine 'record' type when RecordData is shared */}
+					{records.map((record: any) => (
+						<SavedRecordCard key={record.id} record={record} />
+					))}
+				</div>
+			)}
+		</>
 	)
 }
