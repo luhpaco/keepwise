@@ -34,6 +34,11 @@ import {
 	updateIdeaAction,
 	deleteIdeaAction,
 } from '@/actions/memories/idea'
+import {
+	createLinkAction,
+	updateLinkAction,
+	deleteLinkAction,
+} from '@/actions/memories/link'
 
 // Array de variantes de colores para las badges
 const badgeVariants = [
@@ -142,6 +147,7 @@ export default function SavePage() {
 		(IdeaData & { type: 'idea' }) | null
 	>(null)
 	const [ideaSubmitting, setIdeaSubmitting] = useState(false)
+	const [linkSubmitting, setLinkSubmitting] = useState(false)
 
 	// Estado para el diálogo de confirmación de eliminación
 	const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
@@ -193,47 +199,136 @@ export default function SavePage() {
 		fetchRecentData()
 	}, [])
 
-	// Manejadores para Link
-	const handleSaveLink = (data: SaveLinkFormData) => {
-		// Si estamos editando, actualizar el link existente
-		if (editingLink && editingLink.id) {
-			const updatedLinks = links.map((link) =>
-				link.id === editingLink.id
-					? {
-							...link,
-							...data,
-							tags: data.tags
-								? data.tags.split(',').map((tag) => tag.trim())
-								: [],
-							updatedAt: new Date(),
-					  }
-					: link
-			)
-			setLinks(updatedLinks)
-			setSavedItems(prepareSavedItems(updatedLinks, ideas))
-			toast.success('Enlace actualizado', {
-				description: `El enlace "${data.title}" ha sido actualizado correctamente.`,
-			})
-		} else {
-			// Si es un nuevo link, añadirlo a la lista
-			const newLink: LinkData & { type: 'link' } = {
-				id: Date.now().toString(),
-				...data,
-				tags: data.tags ? data.tags.split(',').map((tag) => tag.trim()) : [],
-				createdAt: new Date(),
-				type: 'link',
-			}
-			const updatedLinks = [newLink, ...links]
-			setLinks(updatedLinks)
-			setSavedItems(prepareSavedItems(updatedLinks, ideas))
-			toast.success('Enlace guardado', {
-				description: `El enlace "${data.title}" ha sido guardado correctamente.`,
-			})
-		}
+	// Función para recargar datos
+	const refreshData = async () => {
+		setIsLoading(true)
+		setError(null)
 
-		// Cerrar el diálogo y resetear el estado de edición
-		setLinkDialogOpen(false)
-		setEditingLink(null)
+		console.log('Iniciando recarga de datos...')
+
+		try {
+			// Agregar timestamp para evitar caché del navegador
+			const timestamp = new Date().getTime()
+			const response = await fetch(
+				`/api/memories/recent?limit=20&t=${timestamp}`,
+				{
+					cache: 'no-store',
+					headers: {
+						'Cache-Control': 'no-cache, no-store, must-revalidate',
+						Pragma: 'no-cache',
+						Expires: '0',
+					},
+				}
+			)
+
+			if (!response.ok) {
+				throw new Error(`Error: ${response.status}`)
+			}
+
+			const data = (await response.json()) as ServerMemory[]
+			console.log(`Datos recibidos: ${data.length} elementos`)
+
+			const parsedData = parseServerData(data)
+			const linkItems = parsedData.filter(
+				(item) => 'url' in item
+			) as (LinkData & { type: 'link' })[]
+			const ideaItems = parsedData.filter(
+				(item) => 'content' in item
+			) as (IdeaData & { type: 'idea' })[]
+
+			// Limpiar estados de edición
+			setEditingLink(null)
+			setEditingIdea(null)
+
+			// Actualizar estados
+			setLinks(linkItems)
+			setIdeas(ideaItems)
+			setSavedItems(prepareSavedItems(linkItems, ideaItems))
+
+			console.log(
+				`Datos procesados: ${linkItems.length} enlaces, ${ideaItems.length} ideas`
+			)
+
+			toast.success('Datos actualizados', {
+				description: 'Se han cargado los datos más recientes.',
+			})
+		} catch (err) {
+			console.error('Error al cargar datos recientes:', err)
+			setError('No se pudieron cargar los datos recientes')
+			toast.error('Error al cargar datos', {
+				description:
+					'No se pudieron cargar los datos recientes. Intente de nuevo más tarde.',
+			})
+		} finally {
+			setIsLoading(false)
+			console.log('Finalizada recarga de datos')
+		}
+	}
+
+	// Manejadores para Link
+	const handleSaveLink = async (data: SaveLinkFormData) => {
+		try {
+			setLinkSubmitting(true)
+
+			// Si estamos editando, actualizar el link existente
+			if (editingLink && editingLink.id) {
+				// Actualizar enlace existente usando server action
+				const result = await updateLinkAction({
+					id: editingLink.id,
+					...data,
+					priority: 'MEDIUM', // Por defecto
+				})
+
+				if (result.success) {
+					// Cerrar el diálogo después de una operación exitosa
+					setLinkDialogOpen(false)
+
+					toast.success('Enlace actualizado', {
+						description: `El enlace "${data.title}" ha sido actualizado correctamente.`,
+					})
+
+					// Limpiar el estado de edición antes de recargar
+					setEditingLink(null)
+					// Recargar los datos sin refrescar la página
+					await refreshData()
+				} else {
+					toast.error('Error al actualizar el enlace', {
+						description: result.error || 'Ocurrió un error inesperado.',
+					})
+				}
+			} else {
+				// Crear nuevo enlace usando server action
+				const result = await createLinkAction({
+					...data,
+					priority: 'MEDIUM', // Por defecto
+				})
+
+				if (result.success) {
+					// Cerrar el diálogo después de una operación exitosa
+					setLinkDialogOpen(false)
+
+					toast.success('Enlace guardado', {
+						description: `El enlace "${data.title}" ha sido guardado correctamente.`,
+					})
+
+					// Recargar los datos sin refrescar la página
+					await refreshData()
+				} else {
+					toast.error('Error al guardar el enlace', {
+						description: result.error || 'Ocurrió un error inesperado.',
+					})
+				}
+			}
+		} catch (error) {
+			console.error('Error en la acción del servidor:', error)
+			toast.error('Error', {
+				description:
+					'Ocurrió un error al procesar el enlace. Inténtelo de nuevo más tarde.',
+			})
+		} finally {
+			setLinkSubmitting(false)
+			setEditingLink(null)
+		}
 	}
 
 	// Manejadores para Idea
@@ -253,12 +348,17 @@ export default function SavePage() {
 				})
 
 				if (result.success) {
+					// Cerrar el diálogo después de una operación exitosa
+					setIdeaDialogOpen(false)
+
 					toast.success('Idea actualizada', {
 						description: `La idea "${data.title}" ha sido actualizada correctamente.`,
 					})
 
-					// Recargar los datos para mostrar los cambios
-					window.location.reload()
+					// Limpiar el estado de edición antes de recargar
+					setEditingIdea(null)
+					// Recargar los datos sin refrescar la página
+					await refreshData()
 				} else {
 					toast.error('Error al actualizar la idea', {
 						description: result.error || 'Ocurrió un error inesperado.',
@@ -275,12 +375,15 @@ export default function SavePage() {
 				})
 
 				if (result.success) {
+					// Cerrar el diálogo después de una operación exitosa
+					setIdeaDialogOpen(false)
+
 					toast.success('Idea guardada', {
 						description: `La idea "${data.title}" ha sido guardada correctamente.`,
 					})
 
-					// Recargar los datos para mostrar los cambios
-					window.location.reload()
+					// Recargar los datos sin refrescar la página
+					await refreshData()
 				} else {
 					toast.error('Error al guardar la idea', {
 						description: result.error || 'Ocurrió un error inesperado.',
@@ -295,7 +398,6 @@ export default function SavePage() {
 			})
 		} finally {
 			setIdeaSubmitting(false)
-			setIdeaDialogOpen(false)
 			setEditingIdea(null)
 		}
 	}
@@ -328,15 +430,25 @@ export default function SavePage() {
 			const { id, type, title } = itemToDelete
 
 			if (type === 'link') {
-				const updatedLinks = links.filter((link) => link.id !== id)
-				setLinks(updatedLinks)
-				setSavedItems(prepareSavedItems(updatedLinks, ideas))
+				// Usar server action para eliminar link
+				const result = await deleteLinkAction(id)
 
-				toast.success('Enlace eliminado', {
-					description: `El enlace "${title}" ha sido eliminado.`,
-				})
+				if (result.success) {
+					// Actualizar UI optimísticamente
+					const updatedLinks = links.filter((link) => link.id !== id)
+					setLinks(updatedLinks)
+					setSavedItems(prepareSavedItems(updatedLinks, ideas))
+
+					toast.success('Enlace eliminado', {
+						description: `El enlace "${title}" ha sido eliminado.`,
+					})
+				} else {
+					toast.error('Error al eliminar el enlace', {
+						description: result.error || 'Ocurrió un error inesperado.',
+					})
+				}
 			} else {
-				// Usar server action para eliminar
+				// Usar server action para eliminar idea
 				const result = await deleteIdeaAction(id)
 
 				if (result.success) {
@@ -562,6 +674,10 @@ export default function SavePage() {
 		}).format(date)
 	}
 
+	const handleRefreshClick = () => {
+		refreshData()
+	}
+
 	return (
 		<div className='container mx-auto py-8 px-4 sm:px-6 max-w-7xl flex flex-col gap-4 md:gap-8 h-full'>
 			{/* Cards para las acciones principales */}
@@ -607,6 +723,7 @@ export default function SavePage() {
 									  }
 									: undefined
 							}
+							isSubmitting={linkSubmitting}
 						/>
 					</DialogContent>
 				</Dialog>
@@ -662,7 +779,7 @@ export default function SavePage() {
 						variant='ghost'
 						size='sm'
 						disabled={isLoading}
-						onClick={() => window.location.reload()}
+						onClick={handleRefreshClick}
 						className='text-sm text-primary hover:underline'
 					>
 						Refresh
