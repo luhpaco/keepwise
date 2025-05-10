@@ -12,12 +12,13 @@ import {
 	SelectValue,
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
-import { Lightbulb, Mic } from 'lucide-react'
+import { Lightbulb, Loader2 } from 'lucide-react'
 
 interface CaptureIdeaFormProps {
 	onSubmit: (data: SaveIdeaFormData) => void
 	onCancel: () => void
 	initialData?: Partial<SaveIdeaFormData>
+	isSubmitting?: boolean
 }
 
 const CATEGORIES: IdeaCategory[] = [
@@ -33,6 +34,7 @@ export function CaptureIdeaForm({
 	onSubmit,
 	onCancel,
 	initialData,
+	isSubmitting = false,
 }: CaptureIdeaFormProps) {
 	const [formData, setFormData] = useState<SaveIdeaFormData>({
 		title: initialData?.title || '',
@@ -41,8 +43,6 @@ export function CaptureIdeaForm({
 		tags: initialData?.tags || '',
 	})
 
-	const [isLoading, setIsLoading] = useState(false)
-	const [isRecording, setIsRecording] = useState(false)
 	const [attachments, setAttachments] = useState<File[]>([])
 
 	const handleChange = (
@@ -58,7 +58,6 @@ export function CaptureIdeaForm({
 
 	const handleSubmit = (e: React.FormEvent) => {
 		e.preventDefault()
-		setIsLoading(true)
 
 		try {
 			onSubmit({
@@ -67,23 +66,6 @@ export function CaptureIdeaForm({
 			})
 		} catch (error) {
 			console.error('Error saving idea:', error)
-		} finally {
-			setIsLoading(false)
-		}
-	}
-
-	// Simulación de grabación de voz
-	const toggleRecording = () => {
-		setIsRecording(!isRecording)
-
-		// Si estamos deteniendo la grabación, simularemos que se ha guardado el contenido
-		if (isRecording) {
-			setFormData((prev) => ({
-				...prev,
-				content:
-					prev.content +
-					'\n[Transcripción de audio]: Esta es una simulación de transcripción de voz para la idea.',
-			}))
 		}
 	}
 
@@ -126,6 +108,7 @@ export function CaptureIdeaForm({
 					<Select
 						value={formData.category}
 						onValueChange={handleCategoryChange}
+						disabled={isSubmitting}
 					>
 						<SelectTrigger>
 							<SelectValue placeholder='Select category' />
@@ -152,26 +135,15 @@ export function CaptureIdeaForm({
 						value={formData.title}
 						onChange={handleChange}
 						required
+						disabled={isSubmitting}
 					/>
 				</div>
 
 				{/* Content Field */}
 				<div className='space-y-2'>
-					<div className='flex items-center justify-between'>
-						<label htmlFor='content' className='block text-sm font-medium'>
-							Content
-						</label>
-						<Button
-							type='button'
-							size='sm'
-							variant={isRecording ? 'destructive' : 'outline'}
-							onClick={toggleRecording}
-							className='flex items-center gap-1'
-						>
-							<Mic className='h-4 w-4' />
-							{isRecording ? 'Stop Recording' : 'Record Voice'}
-						</Button>
-					</div>
+					<label htmlFor='content' className='block text-sm font-medium'>
+						Content
+					</label>
 					<Textarea
 						id='content'
 						name='content'
@@ -179,31 +151,47 @@ export function CaptureIdeaForm({
 						value={formData.content}
 						onChange={handleChange}
 						rows={5}
+						disabled={isSubmitting}
 					/>
 				</div>
 
 				{/* Tags Field */}
 				<div className='space-y-2'>
-					<label htmlFor='tags' className='block text-sm font-medium'>
-						Tags
-					</label>
+					<div className='flex items-center justify-between'>
+						<label htmlFor='tags' className='block text-sm font-medium'>
+							Tags
+						</label>
+						<span className='text-xs text-muted-foreground'>
+							Separate tags with commas
+						</span>
+					</div>
 					<Input
 						id='tags'
 						name='tags'
-						placeholder='Add tags separated by commas...'
+						placeholder='e.g., work, project, idea, important'
 						value={formData.tags}
 						onChange={handleChange}
+						disabled={isSubmitting}
 					/>
+					<p className='text-xs text-muted-foreground'>
+						Tags help organize your ideas and make them easier to find later
+					</p>
 				</div>
 
 				{/* Attachments */}
 				<div className='space-y-2'>
 					<label className='block text-sm font-medium'>Attachments</label>
 					<div
-						className='border-2 border-dashed border-border rounded-md p-6 text-center cursor-pointer hover:bg-muted/50 transition-colors'
+						className={`border-2 border-dashed border-border rounded-md p-6 text-center ${
+							isSubmitting
+								? 'opacity-50 cursor-not-allowed'
+								: 'cursor-pointer hover:bg-muted/50'
+						} transition-colors`}
 						onDragOver={handleDragOver}
 						onDrop={handleDrop}
-						onClick={() => document.getElementById('file-upload')?.click()}
+						onClick={() =>
+							!isSubmitting && document.getElementById('file-upload')?.click()
+						}
 					>
 						<input
 							type='file'
@@ -211,6 +199,7 @@ export function CaptureIdeaForm({
 							multiple
 							className='hidden'
 							onChange={handleFileChange}
+							disabled={isSubmitting}
 						/>
 						<div className='flex flex-col items-center justify-center'>
 							<svg
@@ -251,6 +240,7 @@ export function CaptureIdeaForm({
 										onClick={() =>
 											setAttachments(attachments.filter((_, i) => i !== index))
 										}
+										disabled={isSubmitting}
 									>
 										<svg
 											width='15'
@@ -273,11 +263,23 @@ export function CaptureIdeaForm({
 
 				{/* Actions */}
 				<div className='flex justify-end gap-2 pt-2'>
-					<Button type='button' variant='outline' onClick={onCancel}>
+					<Button
+						type='button'
+						variant='outline'
+						onClick={onCancel}
+						disabled={isSubmitting}
+					>
 						Cancel
 					</Button>
-					<Button type='submit' disabled={isLoading}>
-						{isLoading ? 'Saving...' : 'Save Idea'}
+					<Button type='submit' disabled={isSubmitting}>
+						{isSubmitting ? (
+							<>
+								<Loader2 className='mr-2 h-4 w-4 animate-spin' />
+								Saving...
+							</>
+						) : (
+							'Save Idea'
+						)}
 					</Button>
 				</div>
 			</form>
