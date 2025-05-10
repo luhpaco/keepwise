@@ -8,6 +8,16 @@ import {
 	DialogDescription,
 	DialogTrigger,
 } from '@/components/ui/dialog'
+import {
+	AlertDialog,
+	AlertDialogAction,
+	AlertDialogCancel,
+	AlertDialogContent,
+	AlertDialogDescription,
+	AlertDialogFooter,
+	AlertDialogHeader,
+	AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 import { SaveLinkForm } from '@/features/link-management/components/save-link-form'
 import { RecentLinks } from '@/features/link-management/components/recent-links'
@@ -19,6 +29,11 @@ import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { toast } from 'sonner'
+import {
+	createIdeaAction,
+	updateIdeaAction,
+	deleteIdeaAction,
+} from '@/actions/memories/idea'
 
 // Array de variantes de colores para las badges
 const badgeVariants = [
@@ -126,6 +141,16 @@ export default function SavePage() {
 	const [editingIdea, setEditingIdea] = useState<
 		(IdeaData & { type: 'idea' }) | null
 	>(null)
+	const [ideaSubmitting, setIdeaSubmitting] = useState(false)
+
+	// Estado para el diálogo de confirmación de eliminación
+	const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+	const [itemToDelete, setItemToDelete] = useState<{
+		id: string
+		type: 'link' | 'idea'
+		title: string
+	} | null>(null)
+	const [isDeleting, setIsDeleting] = useState(false)
 
 	// Cargar datos recientes del servidor
 	useEffect(() => {
@@ -212,64 +237,67 @@ export default function SavePage() {
 	}
 
 	// Manejadores para Idea
-	const handleSaveIdea = (data: SaveIdeaFormData) => {
-		// Si estamos editando, actualizar la idea existente
-		if (editingIdea && editingIdea.id) {
-			const updatedIdeas = ideas.map((idea) =>
-				idea.id === editingIdea.id
-					? {
-							...idea,
-							...data,
-							tags: data.tags
-								? data.tags.split(',').map((tag) => tag.trim())
-								: [],
-							// Convertir los Files a formato de almacenamiento si es necesario
-							attachments: data.attachments
-								? data.attachments.map((file) => ({
-										name: file.name,
-										type: file.type,
-										url: URL.createObjectURL(file),
-								  }))
-								: idea.attachments,
-							updatedAt: new Date(),
-					  }
-					: idea
-			)
-			setIdeas(updatedIdeas)
-			setSavedItems(prepareSavedItems(links, updatedIdeas))
-			toast.success('Idea actualizada', {
-				description: `La idea "${data.title}" ha sido actualizada correctamente.`,
-			})
-		} else {
-			// Si es una nueva idea, añadirla a la lista
-			const newIdea: IdeaData & { type: 'idea' } = {
-				id: Date.now().toString(),
-				title: data.title,
-				content: data.content,
-				category: data.category,
-				tags: data.tags ? data.tags.split(',').map((tag) => tag.trim()) : [],
-				// Convertir los Files a formato de almacenamiento
-				attachments: data.attachments
-					? data.attachments.map((file) => ({
-							name: file.name,
-							type: file.type,
-							url: URL.createObjectURL(file),
-					  }))
-					: undefined,
-				createdAt: new Date(),
-				type: 'idea',
-			}
-			const updatedIdeas = [newIdea, ...ideas]
-			setIdeas(updatedIdeas)
-			setSavedItems(prepareSavedItems(links, updatedIdeas))
-			toast.success('Idea guardada', {
-				description: `La idea "${data.title}" ha sido guardada correctamente.`,
-			})
-		}
+	const handleSaveIdea = async (data: SaveIdeaFormData) => {
+		try {
+			setIdeaSubmitting(true)
 
-		// Cerrar el diálogo y resetear el estado de edición
-		setIdeaDialogOpen(false)
-		setEditingIdea(null)
+			if (editingIdea && editingIdea.id) {
+				// Actualizar idea existente usando server action
+				const result = await updateIdeaAction({
+					id: editingIdea.id,
+					title: data.title,
+					content: data.content || '',
+					category: data.category,
+					tags: data.tags || '',
+					priority: 'MEDIUM', // Por defecto
+				})
+
+				if (result.success) {
+					toast.success('Idea actualizada', {
+						description: `La idea "${data.title}" ha sido actualizada correctamente.`,
+					})
+
+					// Recargar los datos para mostrar los cambios
+					window.location.reload()
+				} else {
+					toast.error('Error al actualizar la idea', {
+						description: result.error || 'Ocurrió un error inesperado.',
+					})
+				}
+			} else {
+				// Crear nueva idea usando server action
+				const result = await createIdeaAction({
+					title: data.title,
+					content: data.content || '',
+					category: data.category,
+					tags: data.tags || '',
+					priority: 'MEDIUM', // Por defecto
+				})
+
+				if (result.success) {
+					toast.success('Idea guardada', {
+						description: `La idea "${data.title}" ha sido guardada correctamente.`,
+					})
+
+					// Recargar los datos para mostrar los cambios
+					window.location.reload()
+				} else {
+					toast.error('Error al guardar la idea', {
+						description: result.error || 'Ocurrió un error inesperado.',
+					})
+				}
+			}
+		} catch (error) {
+			console.error('Error en la acción del servidor:', error)
+			toast.error('Error', {
+				description:
+					'Ocurrió un error al procesar la idea. Inténtelo de nuevo más tarde.',
+			})
+		} finally {
+			setIdeaSubmitting(false)
+			setIdeaDialogOpen(false)
+			setEditingIdea(null)
+		}
 	}
 
 	const handleEditItem = (
@@ -284,27 +312,58 @@ export default function SavePage() {
 		}
 	}
 
-	const handleDeleteItem = (id: string, type: 'link' | 'idea') => {
-		if (type === 'link') {
-			const linkToDelete = links.find((link) => link.id === id)
-			const updatedLinks = links.filter((link) => link.id !== id)
-			setLinks(updatedLinks)
-			setSavedItems(prepareSavedItems(updatedLinks, ideas))
-			toast.success('Enlace eliminado', {
-				description: linkToDelete
-					? `El enlace "${linkToDelete.title}" ha sido eliminado.`
-					: 'El enlace ha sido eliminado.',
+	// Método para mostrar el diálogo de confirmación
+	const confirmDelete = (id: string, type: 'link' | 'idea', title: string) => {
+		setItemToDelete({ id, type, title })
+		setDeleteDialogOpen(true)
+	}
+
+	// Método para ejecutar la eliminación después de la confirmación
+	const executeDelete = async () => {
+		if (!itemToDelete) return
+
+		setIsDeleting(true)
+
+		try {
+			const { id, type, title } = itemToDelete
+
+			if (type === 'link') {
+				const updatedLinks = links.filter((link) => link.id !== id)
+				setLinks(updatedLinks)
+				setSavedItems(prepareSavedItems(updatedLinks, ideas))
+
+				toast.success('Enlace eliminado', {
+					description: `El enlace "${title}" ha sido eliminado.`,
+				})
+			} else {
+				// Usar server action para eliminar
+				const result = await deleteIdeaAction(id)
+
+				if (result.success) {
+					// Actualizar UI optimísticamente
+					const updatedIdeas = ideas.filter((idea) => idea.id !== id)
+					setIdeas(updatedIdeas)
+					setSavedItems(prepareSavedItems(links, updatedIdeas))
+
+					toast.success('Idea eliminada', {
+						description: `La idea "${title}" ha sido eliminada.`,
+					})
+				} else {
+					toast.error('Error al eliminar la idea', {
+						description: result.error || 'Ocurrió un error inesperado.',
+					})
+				}
+			}
+		} catch (error) {
+			console.error('Error al eliminar:', error)
+			toast.error('Error', {
+				description:
+					'Ocurrió un error al eliminar el elemento. Inténtelo de nuevo más tarde.',
 			})
-		} else {
-			const ideaToDelete = ideas.find((idea) => idea.id === id)
-			const updatedIdeas = ideas.filter((idea) => idea.id !== id)
-			setIdeas(updatedIdeas)
-			setSavedItems(prepareSavedItems(links, updatedIdeas))
-			toast.success('Idea eliminada', {
-				description: ideaToDelete
-					? `La idea "${ideaToDelete.title}" ha sido eliminada.`
-					: 'La idea ha sido eliminada.',
-			})
+		} finally {
+			setIsDeleting(false)
+			setDeleteDialogOpen(false)
+			setItemToDelete(null)
 		}
 	}
 
@@ -430,7 +489,9 @@ export default function SavePage() {
 										</svg>
 									</button>
 									<button
-										onClick={() => handleDeleteItem(item.id || '', item.type)}
+										onClick={() =>
+											confirmDelete(item.id || '', item.type, item.title)
+										}
 										className='p-1.5 rounded-md hover:bg-muted transition-colors'
 										title='Delete'
 									>
@@ -587,6 +648,7 @@ export default function SavePage() {
 									  }
 									: undefined
 							}
+							isSubmitting={ideaSubmitting}
 						/>
 					</DialogContent>
 				</Dialog>
@@ -611,6 +673,40 @@ export default function SavePage() {
 					<div className='space-y-4 pr-4'>{renderRecentSaves()}</div>
 				</ScrollArea>
 			</div>
+
+			{/* Diálogo de confirmación de eliminación */}
+			<AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+				<AlertDialogContent>
+					<AlertDialogHeader>
+						<AlertDialogTitle>¿Estás seguro?</AlertDialogTitle>
+						<AlertDialogDescription>
+							{itemToDelete?.type === 'link'
+								? `El enlace "${itemToDelete?.title}" se eliminará permanentemente.`
+								: `La idea "${itemToDelete?.title}" se eliminará permanentemente.`}
+							Esta acción no se puede deshacer.
+						</AlertDialogDescription>
+					</AlertDialogHeader>
+					<AlertDialogFooter>
+						<AlertDialogCancel disabled={isDeleting}>
+							Cancelar
+						</AlertDialogCancel>
+						<AlertDialogAction
+							onClick={executeDelete}
+							disabled={isDeleting}
+							className='bg-destructive hover:bg-destructive/90'
+						>
+							{isDeleting ? (
+								<>
+									<Loader2 className='mr-2 h-4 w-4 animate-spin' />
+									Eliminando...
+								</>
+							) : (
+								'Eliminar'
+							)}
+						</AlertDialogAction>
+					</AlertDialogFooter>
+				</AlertDialogContent>
+			</AlertDialog>
 		</div>
 	)
 }
