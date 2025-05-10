@@ -2,6 +2,10 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { currentUser } from '@clerk/nextjs/server'
 
+// Establecer revalidación en 0 para siempre obtener datos frescos
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
+
 export const GET = async (req: Request) => {
 	try {
 		// Obtener el usuario autenticado usando Clerk
@@ -31,9 +35,10 @@ export const GET = async (req: Request) => {
 				},
 			},
 			orderBy: {
-				createdAt: 'desc',
+				updatedAt: 'desc', // Ordenar por la fecha de actualización más reciente primero
 			},
 			take: limit,
+			distinct: ['id'], // Evitar duplicados
 		})
 
 		// Transformar los datos para devolverlos en un formato más adecuado para el cliente
@@ -68,7 +73,20 @@ export const GET = async (req: Request) => {
 				: {}),
 		}))
 
-		return NextResponse.json(formattedMemories)
+		// Configurar cabeceras para evitar caché
+		const headers = new Headers()
+		headers.set(
+			'Cache-Control',
+			'no-store, no-cache, must-revalidate, proxy-revalidate'
+		)
+		headers.set('Pragma', 'no-cache')
+		headers.set('Expires', '0')
+		headers.set('Surrogate-Control', 'no-store')
+
+		return NextResponse.json(formattedMemories, {
+			headers,
+			status: 200,
+		})
 	} catch (error) {
 		console.error('Error al obtener memorias recientes:', error)
 		return NextResponse.json(
